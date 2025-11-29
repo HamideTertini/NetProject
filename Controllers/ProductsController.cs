@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using ProductApi.Dtos;
 using ProductApi.Services;
+using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using System;
+
 
 namespace ProductApi.Controllers
 {
@@ -18,21 +21,79 @@ namespace ProductApi.Controllers
         }
 
         
-        [HttpGet]
-        public async Task<IActionResult> GetAll(
-            [FromQuery] string? category,
-            [FromQuery] decimal? minPrice,
-            [FromQuery] decimal? maxPrice)
-        {
-            var products = await _service.GetAllAsync(category, minPrice, maxPrice);
+      [HttpGet]
+public async Task<IActionResult> GetAll(
+    [FromQuery] string? category,
+    [FromQuery] decimal? minPrice,
+    [FromQuery] decimal? maxPrice,
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 10,
+    [FromQuery] string? sortBy = null,
+    [FromQuery] string sortOrder = "asc")
+{
+     // Kjo është vetëm për TEST per me testu Global Exception Middleware
+   // throw new Exception("Test exception from GetAll");
 
-            return Ok(new
-            {
-                message = "Products retrieved successfully.",
-                count = products.Count(),
-                data = products
-            });
+    if (page <= 0) page = 1;
+    if (pageSize <= 0) pageSize = 10;
+
+    var products = await _service.GetAllAsync(category, minPrice, maxPrice);
+
+    IEnumerable<ProductReadDto> query = products;
+
+    if (!string.IsNullOrWhiteSpace(sortBy))
+    {
+        bool desc = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+        switch (sortBy.ToLower())
+        {
+            case "name":
+                query = desc
+                    ? query.OrderByDescending(p => p.Name)
+                    : query.OrderBy(p => p.Name);
+                break;
+
+            case "price":
+                query = desc
+                    ? query.OrderByDescending(p => p.Price)
+                    : query.OrderBy(p => p.Price);
+                break;
+
+            case "category":
+                query = desc
+                    ? query.OrderByDescending(p => p.Category)
+                    : query.OrderBy(p => p.Category);
+                break;
+
+            case "createdat":
+                query = desc
+                    ? query.OrderByDescending(p => p.CreatedAt)
+                    : query.OrderBy(p => p.CreatedAt);
+                break;
+
+            default:
+                break;
         }
+    }
+
+    var totalCount = query.Count();
+    var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+    var items = query
+        .Skip((page - 1) * pageSize)
+        .Take(pageSize)
+        .ToList();
+
+    return Ok(new
+    {
+        message = "Products retrieved successfully.",
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+        data = items
+    });
+}
 
         
         [HttpGet("{id:int}")]
