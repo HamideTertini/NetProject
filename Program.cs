@@ -51,7 +51,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<IProductService, ProductService>();
 
-var key = Encoding.UTF8.GetBytes("super_secret_jwt_key_12345_67890_ABCDE");
+var key = Encoding.UTF8.GetBytes(
+    builder.Configuration["Jwt:Key"]!
+);
+
 
 builder.Services.AddAuthentication(options =>
 {

@@ -21,7 +21,12 @@ namespace ProductApi.Controllers
         }
 
         
-      [HttpGet]
+  
+
+     // Kjo është vetëm për TEST per me testu Global Exception Middleware
+   // throw new Exception("Test exception from GetAll");
+
+    [HttpGet]
 public async Task<IActionResult> GetAll(
     [FromQuery] string? category,
     [FromQuery] decimal? minPrice,
@@ -31,69 +36,26 @@ public async Task<IActionResult> GetAll(
     [FromQuery] string? sortBy = null,
     [FromQuery] string sortOrder = "asc")
 {
-     // Kjo është vetëm për TEST per me testu Global Exception Middleware
-   // throw new Exception("Test exception from GetAll");
-
     if (page <= 0) page = 1;
     if (pageSize <= 0) pageSize = 10;
 
-    var products = await _service.GetAllAsync(category, minPrice, maxPrice);
-
-    IEnumerable<ProductReadDto> query = products;
-
-    if (!string.IsNullOrWhiteSpace(sortBy))
-    {
-        bool desc = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
-
-        switch (sortBy.ToLower())
-        {
-            case "name":
-                query = desc
-                    ? query.OrderByDescending(p => p.Name)
-                    : query.OrderBy(p => p.Name);
-                break;
-
-            case "price":
-                query = desc
-                    ? query.OrderByDescending(p => p.Price)
-                    : query.OrderBy(p => p.Price);
-                break;
-
-            case "category":
-                query = desc
-                    ? query.OrderByDescending(p => p.Category)
-                    : query.OrderBy(p => p.Category);
-                break;
-
-            case "createdat":
-                query = desc
-                    ? query.OrderByDescending(p => p.CreatedAt)
-                    : query.OrderBy(p => p.CreatedAt);
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    var totalCount = query.Count();
-    var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-
-    var items = query
-        .Skip((page - 1) * pageSize)
-        .Take(pageSize)
-        .ToList();
+    var result = await _service.GetAllAsync(
+        category, minPrice, maxPrice,
+        page, pageSize,
+        sortBy, sortOrder
+    );
 
     return Ok(new
     {
         message = "Products retrieved successfully.",
-        page,
-        pageSize,
-        totalCount,
-        totalPages,
-        data = items
+        page = result.Page,
+        pageSize = result.PageSize,
+        totalCount = result.TotalCount,
+        totalPages = result.TotalPages,
+        data = result.Items
     });
 }
+
 
         
         [HttpGet("{id:int}")]
@@ -116,55 +78,67 @@ public async Task<IActionResult> GetAll(
         }
 
         
-        [HttpPost]
-        public async Task<IActionResult> Create(ProductCreateDto dto)
+       [HttpPost]
+public async Task<IActionResult> Create([FromBody] ProductCreateDto dto)
+{
+    if (!ModelState.IsValid)
+    {
+        var errors = ModelState.Values
+            .SelectMany(v => v.Errors)
+            .Select(e => e.ErrorMessage)
+            .ToList();
+
+        return BadRequest(new
         {
-            
-            if (string.IsNullOrWhiteSpace(dto.Name) ||
-                string.IsNullOrWhiteSpace(dto.Category) ||
-                dto.Price <= 0)
-            {
-                return BadRequest(new
-                {
-                    message = "Validation failed.",
-                    errors = new[]
-                    {
-                        "Name, Category dhe Price janë të detyrueshme.",
-                        "Price duhet të jetë > 0."
-                    }
-                });
-            }
+            message = "Validation failed.",
+            errors
+        });
+    }
 
-            var created = await _service.CreateAsync(dto);
+    var created = await _service.CreateAsync(dto);
 
-            return CreatedAtAction(
-                nameof(GetById),
-                new { id = created.Id },
-                new
-                {
-                    message = "Product created successfully.",
-                    data = created
-                });
-        }
+    return CreatedAtAction(
+        nameof(GetById),
+        new { id = created.Id },
+        new
+        {
+            message = "Product created successfully.",
+            data = created
+        });
+}
 
         
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, ProductUpdateDto dto)
-        {
-            var success = await _service.UpdateAsync(id, dto);
-            if (!success)
-            {
-                return NotFound(new
-                {
-                    message = $"Cannot update. Product with id {id} was not found."
-                });
-            }
+       [HttpPut("{id:int}")]
+public async Task<IActionResult> Update(int id, [FromBody] ProductUpdateDto dto)
+{
+    if (!ModelState.IsValid)
+    {
+        var errors = ModelState.Values
+            .SelectMany(v => v.Errors)
+            .Select(e => e.ErrorMessage)
+            .ToList();
 
-            return Ok(new
-            {
-                message = "Product updated successfully."
-            });
-        }
+        return BadRequest(new
+        {
+            message = "Validation failed.",
+            errors
+        });
+    }
+
+    var success = await _service.UpdateAsync(id, dto);
+    if (!success)
+    {
+        return NotFound(new
+        {
+            message = $"Cannot update. Product with id {id} was not found."
+        });
+    }
+
+    return Ok(new
+    {
+        message = "Product updated successfully."
+    });
+}
 
        
         [HttpDelete("{id:int}")]

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductApi.Data;
 using ProductApi.Dtos;
 using ProductApi.Entities;
+using ProductApi.Models;
 
 namespace ProductApi.Services
 {
@@ -14,54 +15,81 @@ namespace ProductApi.Services
             _context = context;
         }
 
-        public async Task<IEnumerable<ProductReadDto>> GetAllAsync(string? category, decimal? minPrice, decimal? maxPrice)
+        public async Task<PagedResult<ProductReadDto>> GetAllAsync(
+            string? category,
+            decimal? minPrice,
+            decimal? maxPrice,
+            int page,
+            int pageSize,
+            string? sortBy,
+            string sortOrder)
         {
-            var query = _context.Products.AsQueryable();
+            var query = _context.Products
+                .AsNoTracking()
+                .AsQueryable();
 
+            // Filtering
             if (!string.IsNullOrWhiteSpace(category))
-            {
                 query = query.Where(p => p.Category == category);
-            }
 
             if (minPrice.HasValue)
-            {
                 query = query.Where(p => p.Price >= minPrice.Value);
-            }
 
             if (maxPrice.HasValue)
-            {
                 query = query.Where(p => p.Price <= maxPrice.Value);
+
+            // Sorting
+            bool desc = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(sortBy))
+            {
+                query = sortBy.ToLower() switch
+                {
+                    "name" => desc ? query.OrderByDescending(p => p.Name)
+                                   : query.OrderBy(p => p.Name),
+
+                    "price" => desc ? query.OrderByDescending(p => p.Price)
+                                    : query.OrderBy(p => p.Price),
+
+                    "category" => desc ? query.OrderByDescending(p => p.Category)
+                                       : query.OrderBy(p => p.Category),
+
+                    "createdat" => desc ? query.OrderByDescending(p => p.CreatedAt)
+                                        : query.OrderBy(p => p.CreatedAt),
+
+                    _ => query
+                };
             }
 
-            var products = await query.ToListAsync();
+            // Paging
+            var totalCount = await query.CountAsync();
+            var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-            return products.Select(p => new ProductReadDto
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(p => ToReadDto(p))
+                .ToListAsync();
+
+            return new PagedResult<ProductReadDto>
             {
-                Id = p.Id,
-                Name = p.Name,
-                Category = p.Category,
-                Price = p.Price,
-                StockQuantity = p.StockQuantity,
-                CreatedAt = p.CreatedAt,
-                InStock = p.StockQuantity > 0
-            });
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                Items = items
+            };
         }
 
         public async Task<ProductReadDto?> GetByIdAsync(int id)
         {
-            var p = await _context.Products.FindAsync(id);
+            var p = await _context.Products
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+
             if (p == null) return null;
 
-            return new ProductReadDto
-            {
-                Id = p.Id,
-                Name = p.Name,
-                Category = p.Category,
-                Price = p.Price,
-                StockQuantity = p.StockQuantity,
-                CreatedAt = p.CreatedAt,
-                InStock = p.StockQuantity > 0
-            };
+            return ToReadDto(p);
         }
 
         public async Task<ProductReadDto> CreateAsync(ProductCreateDto dto)
@@ -78,16 +106,7 @@ namespace ProductApi.Services
             _context.Products.Add(p);
             await _context.SaveChangesAsync();
 
-            return new ProductReadDto
-            {
-                Id = p.Id,
-                Name = p.Name,
-                Category = p.Category,
-                Price = p.Price,
-                StockQuantity = p.StockQuantity,
-                CreatedAt = p.CreatedAt,
-                InStock = p.StockQuantity > 0
-            };
+            return ToReadDto(p);
         }
 
         public async Task<bool> UpdateAsync(int id, ProductUpdateDto dto)
@@ -112,6 +131,20 @@ namespace ProductApi.Services
             _context.Products.Remove(p);
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        private static ProductReadDto ToReadDto(Product p)
+        {
+            return new ProductReadDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Category = p.Category,
+                Price = p.Price,
+                StockQuantity = p.StockQuantity,
+                CreatedAt = p.CreatedAt,
+                InStock = p.StockQuantity > 0
+            };
         }
     }
 }
