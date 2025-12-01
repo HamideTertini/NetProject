@@ -28,7 +28,7 @@ namespace ProductApi.Services
                 .AsNoTracking()
                 .AsQueryable();
 
-            // Filtering
+           
             if (!string.IsNullOrWhiteSpace(category))
                 query = query.Where(p => p.Category == category);
 
@@ -38,7 +38,6 @@ namespace ProductApi.Services
             if (maxPrice.HasValue)
                 query = query.Where(p => p.Price <= maxPrice.Value);
 
-            // Sorting
             bool desc = string.Equals(sortOrder, "desc", StringComparison.OrdinalIgnoreCase);
 
             if (!string.IsNullOrWhiteSpace(sortBy))
@@ -60,8 +59,6 @@ namespace ProductApi.Services
                     _ => query
                 };
             }
-
-            // Paging
             var totalCount = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
